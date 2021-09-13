@@ -1,14 +1,15 @@
+use std::{path::PathBuf, process::Command};
+
+use clap::{App, Arg};
 use polars::{
     self,
     prelude::{CsvReader, Float32Chunked, IntoSeries, NamedFrom, PolarsError, SerReader, Series},
 };
 
-use iced::slider;
-use iced::{Column, Slider, Text};
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Message {
-    SliderModified,
+    SliderModified((String, f32)),
+    ScoresUpdated,
 }
 
 #[derive(Debug, Clone)]
@@ -20,60 +21,75 @@ struct IdeaItem {
     score: f32,
 }
 
-struct AppState {
-    items: Vec<IdeaItem>,
-    fun_weight: f32,
-    diff_weight: f32,
-    market_weight: f32,
-
-    fun_slider: slider::State,
-    diff_slider: slider::State,
-    market_slider: slider::State,
-}
-
-impl AppState {
-    pub fn view(&mut self) -> Column<Message> {
-        // We use a column: a simple vertical layout
-        Column::new()
-            .push(
-                // The increment button. We tell it to produce an
-                // `IncrementPressed` message when pressed
-                Slider::new(
-                    &mut self.fun_slider,
-                    -1.0..=5.0,
-                    1.0,
-                    update_scores(
-                        &self.items,
-                        self.fun_weight,
-                        self.difficulty_weight,
-                        self.market_weight,
-                    ),
-                )
-            )
-            .push(
-                // We show the value of the counter here
-                Text::new(self.value.to_string()).size(50),
-            )
-            .push(
-                // The decrement button. We tell it to produce a
-                // `DecrementPressed` message when pressed
-                Button::new(&mut self.decrement_button, Text::new("-"))
-                    .on_press(Message::DecrementPressed),
-            )
-    }
-}
-
 fn main() -> Result<(), PolarsError> {
-    let mut df = CsvReader::from_path("./ideas_2021-09-08.csv")?
+    let matches = App::new("My Super Program")
+        .version("1.0")
+        // .author("Kevin K. <kbknapp@gmail.com>")
+        .about("Calculating which project to work on next.")
+        .arg(
+            Arg::new("PROJECT")
+                // .short('p')
+                // .long("project")
+                // .value_name("FILE")
+                .required(true)
+                // .index(0)
+                .about("Sets the project file to use"), // .takes_value(true),
+        )
+        .arg(
+            Arg::new("fun")
+                .about("Weighting of fun column")
+                .required(false)
+                .takes_value(true)
+                .short('f')
+                .long("fun")
+                .allow_hyphen_values(true)
+                .default_value("1.0"),
+        )
+        .arg(
+            Arg::new("difficulty")
+                .about("Weighting of difficulty column")
+                .required(false)
+                .takes_value(true)
+                .short('d')
+                .long("difficulty")
+                .allow_hyphen_values(true)
+                .default_value("1.0"),
+        )
+        .arg(
+            Arg::new("market")
+                .about("Weighting of market column")
+                .required(false)
+                .takes_value(true)
+                .short('m')
+                .long("market")
+                .allow_hyphen_values(true)
+                .default_value("1.0"),
+        )
+        .get_matches();
+
+    // let mut df = CsvReader::from_path("./ideas_2021-09-08.csv")?M
+    let mut df = CsvReader::from_path(PathBuf::from(matches.value_of("PROJECT").unwrap()))?
         .infer_schema(None)
         .has_header(true)
         .finish()?;
 
     // println!("{:?}", df.select_series("Fun Estimate /5"));
 
-    let fun_weight = 2.0;
-    let difficulty_weight = 0.5;
-    let market_weight = 1.0;
+    let fun_weight = matches
+        .value_of("fun")
+        .unwrap()
+        .parse::<f32>()
+        .unwrap_or(1.0);
+    let difficulty_weight = matches
+        .value_of("difficulty")
+        .unwrap()
+        .parse::<f32>()
+        .unwrap_or(1.0);
+    let market_weight = matches
+        .value_of("market")
+        .unwrap()
+        .parse::<f32>()
+        .unwrap_or(1.0);
 
     let fun_col = "Fun Estimate /5";
     let diff_col = "Difficulty (1-10)";
@@ -135,13 +151,13 @@ fn main() -> Result<(), PolarsError> {
         })
         .collect::<Vec<String>>();
 
-    let ideaitems: Vec<IdeaItem> = vec![];
+    let mut ideaitems: Vec<IdeaItem> = vec![];
     for x in 0..fun.len() {
         let score: f32 =
             fun[x] * fun_weight + diff[x] * difficulty_weight + market[x] * market_weight;
 
         let mut newidea = IdeaItem {
-            idea: ideas[x],
+            idea: ideas[x].clone(),
             fun: fun[x],
             difficulty: diff[x],
             market: market[x],
@@ -154,9 +170,17 @@ fn main() -> Result<(), PolarsError> {
         // println!("Idea: {:#?}", scores[x]);
         ideaitems.push(newidea);
     }
-    update_scores(&ideaitems, fun_weight, difficulty_weight, market_weight);
+    update_scores(&mut ideaitems, fun_weight, difficulty_weight, market_weight);
 
-    println!("scores:\n{:?}", ideaitems);
+    ideaitems.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+
+    println!(
+        "Settings:\nfun={}, diff={}, market={}",
+        fun_weight, difficulty_weight, market_weight
+    );
+    for item in ideaitems {
+        println!("{}: {}", item.score, item.idea);
+    }
 
     Ok(())
 }
@@ -184,7 +208,7 @@ fn calculate_scores(
 }
 
 fn update_scores(
-    mut ideas: &Vec<IdeaItem>,
+    ideas: &mut Vec<IdeaItem>,
     fun_weight: f32,
     difficulty_weight: f32,
     market_weight: f32,
@@ -196,6 +220,7 @@ fn update_scores(
             + market_weight
             + idea.difficulty * difficulty_weight;
     }
+    // ideas
 }
 
 fn float_mul(float_val: &Series, by: f32) -> Series {
@@ -206,4 +231,13 @@ fn float_mul(float_val: &Series, by: f32) -> Series {
         .map(|val| val.map(|inner| inner as f32 * by))
         .collect::<Float32Chunked>()
         .into_series()
+}
+
+#[test]
+fn cli_should_run() {
+    let mut command = Command::new("idea-chooser.exe").arg("./ideas_2021-09-08.csv");
+
+    // command.
+    // let output = command.output().unwrap();
+    // println!("{:?}", output)
 }
