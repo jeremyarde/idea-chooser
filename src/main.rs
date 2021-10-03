@@ -21,6 +21,55 @@ struct IdeaItem {
     score: f32,
 }
 
+use yew::prelude::*;
+
+enum Msg {
+    AddOne,
+}
+
+struct Model {
+    // `ComponentLink` is like a reference to a component.
+    // It can be used to send messages to the component
+    link: ComponentLink<Self>,
+    value: i64,
+}
+
+impl Component for Model {
+    type Message = Msg;
+    type Properties = ();
+
+    fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
+        Self { link, value: 0 }
+    }
+
+    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+        match msg {
+            Msg::AddOne => {
+                self.value += 1;
+                // the value has changed so we need to
+                // re-render for it to appear on the page
+                true
+            }
+        }
+    }
+
+    fn change(&mut self, _props: Self::Properties) -> ShouldRender {
+        // Should only return "true" if new properties are different to
+        // previously received properties.
+        // This component has no properties so we will always return "false".
+        false
+    }
+
+    fn view(&self) -> Html {
+        html! {
+            <div>
+                <button onclick=self.link.callback(|_| Msg::AddOne)>{ "+1" }</button>
+                <p>{ self.value }</p>
+            </div>
+        }
+    }
+}
+
 fn main() -> Result<(), PolarsError> {
     let matches = App::new("My Super Program")
         .version("1.0")
@@ -31,7 +80,7 @@ fn main() -> Result<(), PolarsError> {
                 // .short('p')
                 // .long("project")
                 // .value_name("FILE")
-                .required(true)
+                .required(false)
                 // .index(0)
                 .about("Sets the project file to use"), // .takes_value(true),
         )
@@ -68,26 +117,30 @@ fn main() -> Result<(), PolarsError> {
         .get_matches();
 
     // let mut df = CsvReader::from_path("./ideas_2021-09-08.csv")?M
-    let mut df = CsvReader::from_path(PathBuf::from(matches.value_of("PROJECT").unwrap()))?
-        .infer_schema(None)
-        .has_header(true)
-        .finish()?;
+    let mut df = CsvReader::from_path(PathBuf::from(
+        matches
+            .value_of("PROJECT")
+            .unwrap_or("./ideas_2021-09-08.csv"),
+    ))?
+    .infer_schema(None)
+    .has_header(true)
+    .finish()?;
 
     // println!("{:?}", df.select_series("Fun Estimate /5"));
 
     let fun_weight = matches
         .value_of("fun")
-        .unwrap()
+        .unwrap_or("1.0")
         .parse::<f32>()
         .unwrap_or(1.0);
     let difficulty_weight = matches
         .value_of("difficulty")
-        .unwrap()
+        .unwrap_or("1.0")
         .parse::<f32>()
         .unwrap_or(1.0);
     let market_weight = matches
         .value_of("market")
-        .unwrap()
+        .unwrap_or("1.0")
         .parse::<f32>()
         .unwrap_or(1.0);
 
@@ -181,6 +234,8 @@ fn main() -> Result<(), PolarsError> {
     for item in ideaitems {
         println!("{}: {}", item.score, item.idea);
     }
+
+    // yew::start_app::<Model>();
 
     Ok(())
 }

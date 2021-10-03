@@ -7,6 +7,8 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.43"
-iced = "0.3.0"
-polars = "0.15.1"
 clap = "3.0.0-beta.4"
+polars = "0.16.0"
+# yew = {version = "0.18.0", package = "web-sys"}
+# eframe = {git = "https://github.com/emilk/egui", branch = "master"}
+# serde = {version = "1", features = ["derive"], optional = true}
